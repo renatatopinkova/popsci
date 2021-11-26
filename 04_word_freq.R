@@ -30,18 +30,6 @@ for (i in 1:length(data_list)) {
 }
 
 
-# Load stopwords ----------------------------------------------------------
-
-
-# Load stopwords from a file
-stop_words_cz <- read.delim("stop_words_czech_R.txt", encoding="UTF-8", header = F, quote="\"", comment.char="")
-stop_words_cz <- stop_words_cz$V1
-
-# bind to a tibble, so it contains both word and lexicon, and can be used instead of a en file
-my_stop_words <- tibble(word = stop_words_cz, lexicon="custom")
-
-
-
 # Select keywords to examine ----------------------------------------------
 
 ## POPULARIZACE
@@ -71,6 +59,9 @@ veda <- readRDS("veda_full_text")
 
 lapply(veda, nrow)
 
+for (i in 1:length(veda)) {
+  veda[[i]] <- distinct(veda[[i]], context, .keep_all = T)
+}
 
 # veda_dejin <- data.frame()
 # for (name in names(veda)) {
@@ -167,6 +158,16 @@ def_web <- read.csv2("../default_weby_typ.csv", header=T)
 soc <- filter(def_web, typ==1) %>% select(web)
 nat <- filter(def_web, typ==2) %>% select(web)
 
+# Load stopwords ----------------------------------------------------------
+
+
+# Load stopwords from a file
+stop_words_cz <- read.delim("stop_words_czech_R.txt", encoding="UTF-8", header = F, quote="\"", comment.char="")
+stop_words_cz <- stop_words_cz$V1
+
+# bind to a tibble, so it contains both word and lexicon, and can be used instead of a en file
+my_stop_words <- tibble(word = stop_words_cz, lexicon="custom")
+
 
 
 # VÌDA ------------------------------------------------------------
@@ -208,7 +209,7 @@ df_veda_clean %>%
   # reorder the position of Var1 by the relative frequency (rel) and plot
   ggplot(aes(reorder(Var1, prop), weight=prop)) + labs(x="Slovo", y="Proporce korpusu") + coord_flip() + geom_bar() + theme_bw()
 
-ggsave("../grafy/veda_all_50_2.png")
+ggsave("../grafy/veda_all_50.png")
 
 ### VEDA in SOCIAL/HUM SCIENCES
 veda_soc <- df_veda_clean %>%
@@ -232,7 +233,7 @@ veda_soc <- df_veda_clean %>%
 veda_soc %>%  
   ggplot(aes(reorder(Var1, prop), weight=prop)) + labs(x="Slovo", y="Proporce korpusu", title = "Spoleèenské vìdy") + coord_flip() + geom_bar() + theme_bw()
 
-ggsave("../grafy/veda_socw_50_2.png")
+ggsave("../grafy/veda_socw_50.png")
 
 
 ### VEDA in NATURAL SCIENCES
@@ -257,7 +258,7 @@ veda_nat %>%
   # reorder the position of Var1 by the relative frequency (rel) and plot
   ggplot(aes(reorder(Var1, prop), weight=prop)) + labs(x="Slovo", y="Proporce korpusu", title = "Pøírodní vìdy") + coord_flip() + geom_bar() + theme_bw()
 
-ggsave("../grafy/veda_natw_50_2.png")
+ggsave("../grafy/veda_natw_50.png")
 
 
 
