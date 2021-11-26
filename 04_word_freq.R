@@ -57,12 +57,12 @@ names(popularizace) <- names(data_list)
 # saveRDS(popularizace, "popularizace_full_text")
 popularizace <- readRDS("popularizace_full_text")
 
-## VÄšDA
+## VEDA
 veda <- list()
 for (i in 1:length(data_list)) {
   print(paste("looking into", names(data_list[i])))
   veda[[i]] <- data_list[[i]] %>% 
-    filter(keyword == "^vÄ›d.*") 
+    filter(keyword == "^vìd.*") 
 }
 
 names(veda) <- names(data_list)
@@ -125,7 +125,7 @@ for (name in names(lemma_list_popularizace)) {
 # saveRDS(df_full_popularizace, "df_full_popularizace")
 
 
-### VÄšDA
+### VEDA
 lemma_list_veda <- list()
 for (name in names(veda)) {
   if (nrow(veda[[name]] > 0)) {
@@ -169,7 +169,7 @@ nat <- filter(def_web, typ==2) %>% select(web)
 
 
 
-# VÄšDA ------------------------------------------------------------
+# VÌDA ------------------------------------------------------------
 # this should be done simpler, will simplify later (DRY)
 
 
@@ -189,8 +189,8 @@ df_veda_clean <- df_full_veda %>%
   filter(str_detect(Var1, pattern)) %>%
   # remove everything related to keyword
   filter(!(str_detect(Var1, "^ved.*")))
-
-df_veda_clean %>%
+  
+df_veda_clean %>% 
   # group so words
   group_by(Var1) %>%
   # count each word across documents
@@ -210,7 +210,7 @@ df_veda_clean %>%
 
 ggsave("../grafy/veda_all_50.png")
 
-### VÄšDA in SOCIAL/HUM SCIENCES
+### VEDA in SOCIAL/HUM SCIENCES
 df_veda_clean %>%
   filter(document %in% soc$web) %>%
   # group so words
@@ -228,7 +228,7 @@ df_veda_clean %>%
   # sort
   arrange(Var1, desc(prop)) %>%
   # reorder the position of Var1 by the relative frequency (rel) and plot
-  ggplot(aes(reorder(Var1, prop), weight=prop)) + labs(x="Slovo", y="Proporce korpusu", title = "SpoleÄenskÃ© vÄ›dy") + coord_flip() + geom_bar() + theme_bw()
+  ggplot(aes(reorder(Var1, prop), weight=prop)) + labs(x="Slovo", y="Proporce korpusu", title = "Spoleèenské vìdy") + coord_flip() + geom_bar() + theme_bw()
 
 ggsave("../grafy/veda_socw_50.png")
 
@@ -251,7 +251,7 @@ df_veda_clean %>%
   # sort
   arrange(Var1, desc(prop)) %>%
   # reorder the position of Var1 by the relative frequency (rel) and plot
-  ggplot(aes(reorder(Var1, prop), weight=prop)) + labs(x="Slovo", y="Proporce korpusu", title = "PÅ™Ã­rodnÃ­ vÄ›dy") + coord_flip() + geom_bar() + theme_bw()
+  ggplot(aes(reorder(Var1, prop), weight=prop)) + labs(x="Slovo", y="Proporce korpusu", title = "Pøírodní vìdy") + coord_flip() + geom_bar() + theme_bw()
 
 ggsave("../grafy/veda_natw_50.png")
 
@@ -259,8 +259,9 @@ ggsave("../grafy/veda_natw_50.png")
 
 # Popularizace by type ---------------------------------------------------------
 
+
 # graph
-df_popularizace_clean <- df_full_popularizace %>%
+df_full_popularizace %>%
   # filter out stop words
   filter(!(Var1 %in% my_stop_words$word)) %>%
   #filter out stop words EN
@@ -274,9 +275,7 @@ df_popularizace_clean <- df_full_popularizace %>%
   # only words that contain only letters (no digits, special chars)
   filter(str_detect(Var1, pattern)) %>%
   # remove everything related to keyword
-  filter(!(str_detect(Var1, "^populari.*")))
-
-df_popularizace_clean %>%
+  filter(!(str_detect(Var1, "^populari.*"))) %>%
   # group so words
   group_by(Var1) %>%
   # count each word across documents
@@ -292,37 +291,28 @@ df_popularizace_clean %>%
   # sort
   arrange(Var1, desc(prop)) %>%
   # reorder the position of Var1 by the relative frequency (rel) and plot
-  ggplot(aes(reorder(Var1, prop), weight=prop)) + labs(y="Proporce korpusu", x="Slovo") + coord_flip() + geom_bar() + theme_bw()
+  ggplot(aes(reorder(Var1, prop), weight=prop)) + labs(x="Slovo", y="Proporce korpusu", title = "Pøírodní vìdy") + coord_flip() + geom_bar() + theme_bw()
 
-ggsave("../grafy/popularizace_all_50.png")
 
 
 
 ### POPULARIZACE in SOCIAL/HUM SCIENCES
-df_popularizace_clean %>%
+pop_soc <- df_full_popularizace %>%
   filter(document %in% soc$web) %>%
-  group_by(Var1) %>%
-  # count each word across documents
-  mutate(n = sum(Freq)) %>%
-  # ungroup
-  ungroup() %>%
-  # keep each word just once
-  distinct(Var1, .keep_all = TRUE) %>%
-  # convert frequency to proportion
-  mutate(prop = n/sum(n)) %>%
-  # get top 30 words
-  top_n(50, prop) %>%
-  # sort
-  arrange(Var1, desc(prop)) %>%
-  # reorder the position of Var1 by the relative frequency (rel) and plot
-  ggplot(aes(reorder(Var1, prop), weight=prop)) + labs(x="Slovo", y="Proporce korpusu", title = "SpoleÄenskÃ© vÄ›dy") + coord_flip() + geom_bar() + theme_bw()
-
-ggsave("../grafy/popularizace_socw_50.png")
-
-
-### POPULARIZACE in NATURAL SCIENCES
-df_popularizace_clean %>%
-  filter(document %in% nat$web) %>%
+  # filter out stop words
+  filter(!(Var1 %in% my_stop_words$word)) %>%
+  #filter out stop words EN
+  filter(!(Var1 %in% stop_words$word)) %>%
+  # remove accents
+  mutate(Var1 = stri_trans_general(Var1, "Latin-ASCII")) %>%
+  # only words of length 3+
+  filter(str_length(Var1) > 2) %>%
+  # remove words that are longer than 25 chars (mistakes, leftover hyperlinks)
+  filter(str_length(Var1) < 25) %>%
+  # only words that contain only letters (no digits, special chars)
+  filter(str_detect(Var1, pattern)) %>%
+  # remove everything related to keyword
+  filter(!(str_detect(Var1, "^populari.*"))) %>%
   # group so words
   group_by(Var1) %>%
   # count each word across documents
@@ -337,10 +327,48 @@ df_popularizace_clean %>%
   top_n(50, prop) %>%
   # sort
   arrange(Var1, desc(prop)) %>%
-  # reorder the position of Var1 by the relative frequency (rel) and plot
-  ggplot(aes(reorder(Var1, prop), weight=prop)) + labs(x="Slovo", y="Proporce korpusu", title = "PÅ™Ã­rodnÃ­ vÄ›dy") + coord_flip() + geom_bar() + theme_bw()
+  
+pop_soc %>%
+    # reorder the position of Var1 by the relative frequency (rel) and plot
+  ggplot(aes(reorder(Var1, prop), weight=prop)) + labs(x="Slovo", y="Proporce korpusu", title = "Pøírodní vìdy") + coord_flip() + geom_bar() + theme_bw()
 
-ggsave("../grafy/popularizace_natw_50.png")
+
+### POPULARIZACE in NATURAL SCIENCES
+pop_nat <- df_full_popularizace %>%
+  filter(document %in% nat$web) %>%
+  # filter out stop words
+  filter(!(Var1 %in% my_stop_words$word)) %>%
+  #filter out stop words EN
+  filter(!(Var1 %in% stop_words$word)) %>%
+  # remove accents
+  mutate(Var1 = stri_trans_general(Var1, "Latin-ASCII")) %>%
+  # only words of length 3+
+  filter(str_length(Var1) > 2) %>%
+  # remove words that are longer than 25 chars (mistakes, leftover hyperlinks)
+  filter(str_length(Var1) < 25) %>%
+  # only words that contain only letters (no digits, special chars)
+  filter(str_detect(Var1, pattern)) %>%
+  # remove everything related to keyword
+  filter(!(str_detect(Var1, "^populari.*"))) %>%
+  # group so words
+  group_by(Var1) %>%
+  # count each word across documents
+  mutate(n = sum(Freq)) %>%
+  # ungroup
+  ungroup() %>%
+  # keep each word just once
+  distinct(Var1, .keep_all = TRUE) %>%
+  # convert frequency to proportion
+  mutate(prop = n/sum(n)) %>%
+  # get top 30 words
+  top_n(50, prop) %>%
+  # sort
+  arrange(Var1, desc(prop)) 
+
+
+pop_nat %>%
+  # reorder the position of Var1 by the relative frequency (rel) and plot
+  ggplot(aes(reorder(Var1, prop), weight=prop)) + labs(x="Slovo", y="Proporce korpusu", title = "Pøírodní vìdy") + coord_flip() + geom_bar() + theme_bw()
 
 
 
