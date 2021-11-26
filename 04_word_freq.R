@@ -178,7 +178,7 @@ df_veda_clean <- df_full_veda %>%
   # filter out stop words
   filter(!(Var1 %in% my_stop_words$word)) %>%
   # filter out stop words
-  filter(!(Var1 %in% my_stop_words$word)) %>%
+  filter(!(Var1 %in% stop_words)) %>%
   # remove accents
   mutate(Var1 = stri_trans_general(Var1, "Latin-ASCII")) %>%
   # only words of length 3+
@@ -201,17 +201,17 @@ df_veda_clean %>%
   distinct(Var1, .keep_all = TRUE) %>%
   # convert frequency to proportion
   mutate(prop = n/sum(n)) %>%
-  # get top 30 words
+  # get top 50 words
   top_n(50, prop) %>%
   # sort
   arrange(Var1, desc(prop)) %>%
   # reorder the position of Var1 by the relative frequency (rel) and plot
   ggplot(aes(reorder(Var1, prop), weight=prop)) + labs(x="Slovo", y="Proporce korpusu") + coord_flip() + geom_bar() + theme_bw()
 
-ggsave("../grafy/veda_all_50.png")
+ggsave("../grafy/veda_all_50_2.png")
 
 ### VEDA in SOCIAL/HUM SCIENCES
-df_veda_clean %>%
+veda_soc <- df_veda_clean %>%
   filter(document %in% soc$web) %>%
   # group so words
   group_by(Var1) %>%
@@ -223,18 +223,20 @@ df_veda_clean %>%
   distinct(Var1, .keep_all = TRUE) %>%
   # convert frequency to proportion
   mutate(prop = n/sum(n)) %>%
-  # get top 30 words
+  # get top 50 words
   top_n(50, prop) %>%
   # sort
-  arrange(Var1, desc(prop)) %>%
-  # reorder the position of Var1 by the relative frequency (rel) and plot
+  arrange(Var1, desc(prop)) 
+  
+# reorder the position of Var1 by the relative frequency (rel) and plot
+veda_soc %>%  
   ggplot(aes(reorder(Var1, prop), weight=prop)) + labs(x="Slovo", y="Proporce korpusu", title = "Spoleèenské vìdy") + coord_flip() + geom_bar() + theme_bw()
 
-ggsave("../grafy/veda_socw_50.png")
+ggsave("../grafy/veda_socw_50_2.png")
 
 
-### VÄšDA in NATURAL SCIENCES
-df_veda_clean %>%
+### VEDA in NATURAL SCIENCES
+veda_nat <- df_veda_clean %>%
   filter(document %in% nat$web) %>%
   # group so words
   group_by(Var1) %>%
@@ -246,14 +248,16 @@ df_veda_clean %>%
   distinct(Var1, .keep_all = TRUE) %>%
   # convert frequency to proportion
   mutate(prop = n/sum(n)) %>%
-  # get top 30 words
+  # get top 50 words
   top_n(50, prop) %>%
   # sort
-  arrange(Var1, desc(prop)) %>%
+  arrange(Var1, desc(prop))
+
+veda_nat %>%
   # reorder the position of Var1 by the relative frequency (rel) and plot
   ggplot(aes(reorder(Var1, prop), weight=prop)) + labs(x="Slovo", y="Proporce korpusu", title = "Pøírodní vìdy") + coord_flip() + geom_bar() + theme_bw()
 
-ggsave("../grafy/veda_natw_50.png")
+ggsave("../grafy/veda_natw_50_2.png")
 
 
 
@@ -286,7 +290,7 @@ df_full_popularizace %>%
   distinct(Var1, .keep_all = TRUE) %>%
   # convert frequency to proportion
   mutate(prop = n/sum(n)) %>%
-  # get top 30 words
+  # get top 50 words
   top_n(50, prop) %>%
   # sort
   arrange(Var1, desc(prop)) %>%
@@ -323,7 +327,7 @@ pop_soc <- df_full_popularizace %>%
   distinct(Var1, .keep_all = TRUE) %>%
   # convert frequency to proportion
   mutate(prop = n/sum(n)) %>%
-  # get top 30 words
+  # get top 50 words
   top_n(50, prop) %>%
   # sort
   arrange(Var1, desc(prop)) %>%
@@ -360,7 +364,7 @@ pop_nat <- df_full_popularizace %>%
   distinct(Var1, .keep_all = TRUE) %>%
   # convert frequency to proportion
   mutate(prop = n/sum(n)) %>%
-  # get top 30 words
+  # get top 50 words
   top_n(50, prop) %>%
   # sort
   arrange(Var1, desc(prop)) 
