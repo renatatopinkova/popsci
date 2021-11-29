@@ -98,7 +98,7 @@ ggplot(soc_types, aes(factor(agreed_c), prop, fill=agreed_c)) +
                      axis.text.x = element_text(vjust = -2), 
                      axis.title.x = element_text(vjust = -4, margin = margin(t = 5, b = 15))) +
   scale_fill_grey() + 
-  labs(x = "Typ webu", y="Procenta", title = "Společenské weby") +
+  labs(x = "Typ webu", y="Procenta", title = "Společenskovědní/humanitní weby") +
   scale_y_continuous(breaks = c(0,5,10,15,20,25,30), limits = c(0,30)) + 
   geom_text(aes(label = round(prop)), vjust = -0.3)
 
@@ -110,7 +110,7 @@ ggplot(nat_types, aes(factor(agreed_c), prop, fill=agreed_c)) +
                      axis.text.x = element_text(vjust = -2), 
                      axis.title.x = element_text(vjust = -4, margin = margin(t = 5, b = 15))) +
   scale_fill_grey() + 
-  labs(x = "Typ webu", y="Procenta", title = "Přírodovědné weby") +
+  labs(x = "Typ webu", y="Procenta", title = "Přírodovědné/technické weby") +
   scale_y_continuous(breaks = c(0,5,10,15,20,25,30), limits = c(0,30)) + 
   geom_text(aes(label = round(prop)), vjust = -0.3)
 
