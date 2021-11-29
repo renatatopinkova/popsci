@@ -6,6 +6,7 @@
 
 library(dplyr)
 library(tidyr)
+library(ggplot2)
 
 # Load data ---------------------------------------------------------------
 
@@ -51,5 +52,66 @@ nat_d <- nat_combined %>% filter(!(type_RT == type_PR))
 write.csv2(soc_d, "soc_disagreement.csv")
 write.csv2(nat_d, "nat_disagreement.csv")
 
+# --> this was resolved among the coders
+
+# Loading resolved file ---------------------------------------------------
+
+nat_resolved <- read.csv2("nat_disagreement_resolved.csv")
+soc_resolved <- read.csv2("soc_disagreement_resolved.csv")
 
 
+
+# Merge original coding with resolved disagreements -----------------------
+
+soc_c <- soc_combined %>% 
+  full_join(soc_resolved, by="name") %>%
+  mutate(agreed_c = ifelse(is.na(agreed), type_RT, agreed))
+
+
+nat_c <- nat_combined %>% 
+  full_join(nat_resolved, by="name") %>%
+  mutate(agreed_c = ifelse(is.na(agreed), type_RT, agreed))
+
+
+# get proportions 
+soc_types <- soc_c %>% 
+  count(agreed_c) %>% mutate(prop = (n/242)*100)
+
+nat_types <- nat_c %>% 
+  count(agreed_c) %>% mutate(prop = (n/239)*100)
+
+# convert to factors
+soc_types$agreed_c <- as.factor(soc_types$agreed_c)
+nat_types$agreed_c <- as.factor(nat_types$agreed_c)
+
+# label factors
+levels(soc_types$agreed_c) <- c("sociální média", "zpravodajství", "nakladatelství", "vládní weby", "popularizační","vědecké inst.", "grantové ag", "ostatní")
+levels(nat_types$agreed_c) <- c("sociální média", "zpravodajství", "nakladatelství", "vládní weby", "popularizační","vědecké inst.", "grantové ag", "ostatní")
+
+
+
+# Graphs ------------------------------------------------------------------
+
+
+ggplot(soc_types, aes(factor(agreed_c), prop, fill=agreed_c)) + 
+  geom_col() + theme(legend.position = "none", 
+                     axis.text.x = element_text(vjust = -2), 
+                     axis.title.x = element_text(vjust = -4, margin = margin(t = 5, b = 15))) +
+  scale_fill_grey() + 
+  labs(x = "Typ webu", y="Procenta", title = "Společenské weby") +
+  scale_y_continuous(breaks = c(0,5,10,15,20,25,30), limits = c(0,30)) + 
+  geom_text(aes(label = round(prop)), vjust = -0.3)
+
+ggsave("../grafy/soc_top_250.png")
+
+
+ggplot(nat_types, aes(factor(agreed_c), prop, fill=agreed_c)) + 
+  geom_col() + theme(legend.position = "none", 
+                     axis.text.x = element_text(vjust = -2), 
+                     axis.title.x = element_text(vjust = -4, margin = margin(t = 5, b = 15))) +
+  scale_fill_grey() + 
+  labs(x = "Typ webu", y="Procenta", title = "Přírodovědné weby") +
+  scale_y_continuous(breaks = c(0,5,10,15,20,25,30), limits = c(0,30)) + 
+  geom_text(aes(label = round(prop)), vjust = -0.3)
+
+ggsave("../grafy/nat_top_250.png")
