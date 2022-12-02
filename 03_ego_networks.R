@@ -3,7 +3,11 @@
 library(dplyr)
 library(stringr)
 library(igraph)
-
+library(forcats)
+library(ggplot2)
+library(tidyr)
+library(glue)
+library(patchwork)
 
 # Data import -------------------------------------------------------------
 
@@ -52,7 +56,7 @@ for (i in 1:length(data_list)) {
 net_list <- lapply(data_list, graph_from_data_frame, directed=T)
 
 # saveRDS(net_list, "net_list_whole")
-# net_list <- readRDS("net_list_whole")
+net_list <- readRDS("net_list_whole")
 
 # Extracting egos ---------------------------------------------------------
 
@@ -84,7 +88,7 @@ for (i in 1:length(net_list)) {
 names(ego_net) <- data_names
 
 # saveRDS(ego_net, "ego_net")
-# loadRDS("ego_net)
+ego_net <- readRDS("ego_net")
 
 
 # Summaries ---------------------------------------------------------------
@@ -99,18 +103,35 @@ for (i in 1:length(net_list)) {
 ## Create dataframe with summaries
 summary_stats <- data.frame()
 for (i in 1:length(net_list)) {
-  df <- data.frame(name = names(ego_net[i]), nodes = gorder(ego_net[[i]]), edges = gsize(ego_net[[i]]))
+  df <- data.frame(name = names(ego_net[i]), 
+                   nodes = gorder(ego_net[[i]]), 
+                   edges = gsize(ego_net[[i]]),
+                   avg_degree = round(mean(degree(ego_net[[i]])), 0)
+  )
   summary_stats <- rbind(summary_stats, df)
 }
 
 
 # file with coded type 1 = hum/soc, 2 - nat/tech
-def_web <- read.csv2("../default_weby_typ.csv", header=T)
+def_web <- read_delim("./default_weby_typ.csv",
+                      delim = ";", escape_double = FALSE, trim_ws = TRUE)
 
 # link with web types 
 summary_stats <- summary_stats %>% 
   inner_join(def_web, by = c("name" = "web")) %>% 
-  select(name, nodes, edges, typ)
+  select(name, nodes, edges, avg_degree, typ)
+
+summary_stats %>% 
+  filter(typ == 1 | typ == 2) %>% 
+  mutate(typ = case_when(
+    typ == 1 ~ "Sociálněvědní",
+    typ == 2 ~ "Přírodovědné"
+  )) %>% 
+  group_by(typ) %>% 
+  summarise(n = n(),
+            avg_nodes = mean(nodes),
+            avg_edges = mean(edges),
+            avg_degree = mean(avg_degree))
 
 
 # find smallest & greatest nets
@@ -213,10 +234,116 @@ natw <- nat_uni %>%
 
 soc_nat <- socw %>% 
   full_join(natw, by="name", suffix=c("_soc","_nat")) %>%
-  replace_na(list(n_soc=0,
+  tidyr::replace_na(list(n_soc=0,
                   n_nat= 0,
                   prop_soc = 0,
-                  prop_nat = 0))
+                  prop_nat = 0)) %>% 
+  filter(!str_detect(name, "(google)|(doi.org)"))
+
+
+# Get websites that are most under/over-represented in soc/nat
+diff_minus <- soc_nat %>% 
+  mutate(diff = prop_soc - prop_nat) %>% 
+  arrange(diff) %>% 
+  head(15)
+
+diff_plus <- soc_nat %>% 
+  mutate(diff = prop_soc - prop_nat) %>% 
+  arrange(desc(diff)) %>% 
+  head(15)
+
+diffs <- bind_rows(diff_minus, diff_plus)
+
+# diffs %>% 
+#   ggplot(aes(y=reorder(name, diff), x=diff, fill = positive)) + geom_col() +
+#   labs(x = "Rozdíl v zastoupení odkazů", y = "Název webu") +
+#   guides(fill = "none") + 
+#   geom_text(aes(label = diff, x = bump), size = 2.5) +
+#   scale_x_continuous(limits = c(-60,30),
+#                      breaks = seq(-60,30, by = 10)) +
+#   #scale_fill_brewer(palette = "Paired") +
+#   scale_fill_manual(values = c("#727272", "#15607a")) +
+#   theme_minimal() 
+
+
+
+diffs_clean <- diffs %>% 
+  select(-c(n_soc, n_nat)) %>% 
+  mutate(prop_nat = prop_nat * 100,
+         prop_soc = prop_soc * 100,
+         bump_nat = ifelse(prop_nat < prop_soc,
+                           prop_nat - 2.5,
+                           prop_nat + 2.5),
+         bump_soc = ifelse(prop_nat < prop_soc,
+                           prop_soc + 2.5,
+                           prop_soc - 2.5)) %>% 
+  pivot_longer(cols = -c(name, diff), names_to = c(".value", "web"), names_sep = "_") 
+
+
+plot_dumbbell <- function(df) {
+df %>% 
+  ggplot(aes(x = prop, y = reorder(name, abs(-diff)), color = web)) +
+  geom_line(color = "#E6E6E6", size = 1.75) +
+  geom_point(size = 2) +
+  labs(x = "Procenta", y = "Název webu") +
+  geom_text(aes(label = glue("{prop}%"), x = bump), size = 3) +
+  scale_color_manual(name = NULL, 
+                     breaks = c("nat", "soc"),
+                     values = c("#727272", "#15607a"),
+                     labels = c("Přírodovědné", "Společenskovědní"))+
+  scale_x_continuous(limits = c(-5,90),
+                     breaks = seq(-5,90, by = 10),
+                     labels = glue("{seq(-5,90, 10)}%")) +
+  theme_minimal() +
+  theme(legend.position =  c(1, 0.01),
+        legend.justification = c("right", "bottom"),
+        legend.background = element_rect(fill="white", linetype="blank"))
+
+}
+
+
+nadrepre_nat <- diffs_clean %>% 
+  filter(diff < 0) %>% 
+  plot_dumbbell() + ggtitle("Odkazy nadreprezentované na webech přírodovědných institucí")
+  
+nadrepre_soc <- diffs_clean %>% 
+  filter(diff > 0) %>% 
+  plot_dumbbell() + ggtitle("Odkazy nadreprezentované na webech společenskovědních institucí") +
+  theme(plot.title = element_text(hjust = -1.4))
+
+
+
+
+plot_dumbbell_combined <- function(df) {
+  df %>% 
+    ggplot(aes(x = prop, y = reorder(name, abs(-diff)), color = web)) +
+    geom_line(color = "#E6E6E6", size = 1.75) +
+    geom_point(size = 2) +
+    labs(x = "Procenta", y = "Název webu") +
+    geom_text(aes(label = glue("{prop}%"), x = bump), size = 3) +
+    scale_color_manual(name = NULL, 
+                       breaks = c("nat", "soc"),
+                       values = c("#727272", "#15607a"),
+                       labels = c("Přírodovědné", "Společenskovědní"))+
+    theme_minimal() 
+
+  
+}
+
+
+
+nadrepre_nat2 <- diffs_clean %>% 
+  filter(diff < 0) %>% 
+  plot_dumbbell_combined() + 
+  labs(y = "", x = "Procenta")
+
+
+nadrepre_soc2 <- diffs_clean %>% 
+  filter(diff > 0) %>% 
+  plot_dumbbell_combined()
+
+# patch them together
+(nadrepre_soc2 | nadrepre_nat2) + plot_layout(widths = c(1, 2), guides = "collect") & theme(legend.position = 'top')
 
 
 
@@ -251,8 +378,43 @@ levels(codedN_top$type) <- c("sociální média", "zpravodajství", "nakladatels
 
 
 
-# graphs 
-ggplot(codedS_top, aes(factor(type), prop, fill=type)) + geom_col() + theme(legend.position = "none")
-ggplot(codedN_top, aes(factor(type), prop, fill=type)) + geom_col() + theme(legend.position = "none")
 
+coded_full <- codedN_top %>% 
+  full_join(codedS_top, by = "type", suffix = c("_nat", "_soc")) %>% 
+  mutate(prop_nat = round(prop_nat * 100, 0),
+         prop_soc = round(prop_soc * 100, 0),
+         bump_nat = ifelse(prop_nat < prop_soc,
+                       prop_nat - 2,
+                       prop_nat + 2),
+         bump_soc = ifelse(prop_nat < prop_soc,
+                           prop_soc + 2,
+                           prop_soc - 2)) %>% 
+  select(-c(n_nat, n_soc)) %>% 
+  pivot_longer(cols = -type, names_to = c(".value", "web"), names_sep = "_")
+  
+  
+ 
+  
+  ## TODO: podle videa
+
+# barbell plot
+coded_full %>% 
+  ggplot(aes(x = prop, y = fct_reorder(type, desc(type)), color = web)) +
+  geom_line(color = "#E6E6E6", size = 1.75) +
+  geom_point(size = 2) +
+  labs(x = "Procenta", y = "Typ webu") +
+  geom_text(aes(label = glue("{prop}%"), x = bump), size = 3) +
+  scale_color_manual(name = NULL, 
+                     breaks = c("nat", "soc"),
+                     values = c("#727272", "#15607a"),
+                     labels = c("Přírodovědný", "Společenskovědní"))+
+  scale_x_continuous(limits = c(0,30),
+                     breaks = seq(0,30, by = 5),
+                     labels = glue("{seq(0,30, 5)}%")) +
+  theme_minimal() +
+  theme(legend.position =  c(1, 0.025),
+        legend.justification = c("right", "bottom"),
+        legend.background = element_rect(fill="white", linetype="blank"))
+
+ggsave("top_250_combined.png")
 

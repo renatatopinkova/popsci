@@ -50,14 +50,17 @@ veda <- list()
 for (i in 1:length(data_list)) {
   print(paste("looking into", names(data_list[i])))
   veda[[i]] <- data_list[[i]] %>% 
-    filter(keyword == "^vÏd.*") 
+    filter(keyword == "^v?d.*") 
 }
 
 names(veda) <- names(data_list)
 # saveRDS(veda, "veda_full_text")
 veda <- readRDS("veda_full_text")
 
-lapply(veda, nrow)
+lapply(popularizace, nrow) %>% bind_rows() %>% 
+  tidyr::pivot_longer(., cols = everything()) %>% 
+  summarise(sum = sum(value))
+
 
 for (i in 1:length(veda)) {
   veda[[i]] <- distinct(veda[[i]], context, .keep_all = T)
@@ -170,7 +173,7 @@ my_stop_words <- tibble(word = stop_words_cz, lexicon="custom")
 
 
 
-# VÃDA ------------------------------------------------------------
+# V?DA ------------------------------------------------------------
 # this should be done simpler, will simplify later (DRY)
 
 
@@ -191,29 +194,52 @@ df_veda_clean <- df_full_veda %>%
   # remove everything related to keyword
   filter(!(str_detect(Var1, "^ved.*")))
   
-df_veda_clean %>% 
+df_veda_clean <- df_veda_clean %>% 
+  inner_join(def_web, by = c("document"="web")) %>% 
+  filter(typ <= 2) %>% 
   # group so words
-  group_by(Var1) %>%
+  group_by(Var1, typ) %>%
   # count each word across documents
   mutate(n = sum(Freq)) %>%
-  # ungroup
-  ungroup() %>%
   # keep each word just once
-  distinct(Var1, .keep_all = TRUE) %>%
+  distinct(Var1, typ, .keep_all = TRUE) %>%
   # convert frequency to proportion
-  mutate(prop = n/sum(n)) %>%
-  # get top 50 words
-  top_n(50, prop) %>%
-  # sort
-  arrange(Var1, desc(prop)) %>%
-  # reorder the position of Var1 by the relative frequency (rel) and plot
-  ggplot(aes(reorder(Var1, prop), weight=prop)) + labs(x="Slovo", y="Proporce korpusu") + coord_flip() + geom_bar() + theme_bw()
+  group_by(typ) %>% 
+  mutate(prop = n/sum(n)*100) 
 
-ggsave("../grafy/veda_all_50.png")
+
+
+diff_veda <- df_veda_clean %>% 
+  select(Var1, typ, prop) %>% 
+  ungroup() %>% 
+  pivot_wider(names_from = "typ", values_from = "prop", names_prefix = "typ_") %>% 
+  replace_na(list(typ_1 = 0,
+                  typ_2 = 0)) %>% 
+  mutate(diff = typ_1 - typ_2) 
+
+diff_veda %>% 
+  arrange(desc(abs(diff))) %>% 
+  print(n =50)
+
+diffs_clean_veda <- diff_veda %>% 
+  mutate(bump_1 = ifelse(typ_1 < typ_2,
+                         typ_1 - .25,
+                         typ_1 + .25),
+         bump_2 = ifelse(typ_1 < typ_2,
+                         typ_2 + .25,
+                         typ_2 - .25)) %>% 
+  pivot_longer(cols = -c(Var1, diff), names_to = c(".value", "web"), names_sep = "_") %>% 
+  mutate(prop = round(typ, 2),
+         diff = round(diff, 2))
+
+diffs_clean_veda %>% 
+  slice_max(abs(diff), n = 28) %>% 
+  plot_dumbbell() 
+
 
 ### VEDA in SOCIAL/HUM SCIENCES
 veda_soc <- df_veda_clean %>%
-  filter(document %in% soc$web) %>%
+  group_by()
   # group so words
   group_by(Var1) %>%
   # count each word across documents
@@ -225,13 +251,13 @@ veda_soc <- df_veda_clean %>%
   # convert frequency to proportion
   mutate(prop = n/sum(n)) %>%
   # get top 50 words
-  top_n(50, prop) %>%
+  top_n(20, prop) %>%
   # sort
   arrange(Var1, desc(prop)) 
   
 # reorder the position of Var1 by the relative frequency (rel) and plot
 veda_soc %>%  
-  ggplot(aes(reorder(Var1, prop), weight=prop)) + labs(x="Slovo", y="Proporce korpusu", title = "SpoleËenskÈ vÏdy") + coord_flip() + geom_bar() + theme_bw()
+  ggplot(aes(reorder(Var1, prop), weight=prop)) + labs(x="Slovo", y="Proporce korpusu", title = "Spoleƒçensk√© vƒõdy") + coord_flip() + geom_bar() + theme_bw()
 
 ggsave("../grafy/veda_socw_50.png")
 
@@ -256,7 +282,7 @@ veda_nat <- df_veda_clean %>%
 
 veda_nat %>%
   # reorder the position of Var1 by the relative frequency (rel) and plot
-  ggplot(aes(reorder(Var1, prop), weight=prop)) + labs(x="Slovo", y="Proporce korpusu", title = "P¯ÌrodnÌ vÏdy") + coord_flip() + geom_bar() + theme_bw()
+  ggplot(aes(reorder(Var1, prop), weight=prop)) + labs(x="Slovo", y="Proporce korpusu", title = "P??rodn? v?dy") + coord_flip() + geom_bar() + theme_bw()
 
 ggsave("../grafy/veda_natw_50.png")
 
@@ -266,7 +292,7 @@ ggsave("../grafy/veda_natw_50.png")
 
 
 # graph
-df_full_popularizace %>%
+df_popularizace_clean <- df_full_popularizace %>%
   # filter out stop words
   filter(!(Var1 %in% my_stop_words$word)) %>%
   #filter out stop words EN
@@ -280,8 +306,10 @@ df_full_popularizace %>%
   # only words that contain only letters (no digits, special chars)
   filter(str_detect(Var1, pattern)) %>%
   # remove everything related to keyword
-  filter(!(str_detect(Var1, "^populari.*"))) %>%
-  # group so words
+  filter(!(str_detect(Var1, "^populari.*"))) 
+  
+  
+df_popularizace_clean %>%  # group so words
   group_by(Var1) %>%
   # count each word across documents
   mutate(n = sum(Freq)) %>%
@@ -292,89 +320,79 @@ df_full_popularizace %>%
   # convert frequency to proportion
   mutate(prop = n/sum(n)) %>%
   # get top 50 words
-  top_n(50, prop) %>%
+  top_n(20, prop) %>%
   # sort
   arrange(Var1, desc(prop)) %>%
   # reorder the position of Var1 by the relative frequency (rel) and plot
-  ggplot(aes(reorder(Var1, prop), weight=prop)) + labs(x="Slovo", y="Proporce korpusu", title = "P¯ÌrodnÌ vÏdy") + coord_flip() + geom_bar() + theme_bw()
+  ggplot(aes(reorder(Var1, prop), weight=prop)) + labs(x="Slovo", y="Proporce korpusu") + coord_flip() + geom_bar() + theme_bw()
 
 
 
 
 ### POPULARIZACE in SOCIAL/HUM SCIENCES
-pop_soc <- df_full_popularizace %>%
-  filter(document %in% soc$web) %>%
-  # filter out stop words
-  filter(!(Var1 %in% my_stop_words$word)) %>%
-  #filter out stop words EN
-  filter(!(Var1 %in% stop_words$word)) %>%
-  # remove accents
-  mutate(Var1 = stri_trans_general(Var1, "Latin-ASCII")) %>%
-  # only words of length 3+
-  filter(str_length(Var1) > 2) %>%
-  # remove words that are longer than 25 chars (mistakes, leftover hyperlinks)
-  filter(str_length(Var1) < 25) %>%
-  # only words that contain only letters (no digits, special chars)
-  filter(str_detect(Var1, pattern)) %>%
-  # remove everything related to keyword
-  filter(!(str_detect(Var1, "^populari.*"))) %>%
+df_popularizace_clean <-  df_popularizace_clean %>% 
+  inner_join(def_web, by = c("document"="web")) %>% 
+  filter(typ <= 2) %>% 
   # group so words
-  group_by(Var1) %>%
+  group_by(Var1, typ) %>%
   # count each word across documents
   mutate(n = sum(Freq)) %>%
-  # ungroup
-  ungroup() %>%
   # keep each word just once
-  distinct(Var1, .keep_all = TRUE) %>%
+  distinct(Var1, typ, .keep_all = TRUE) %>%
   # convert frequency to proportion
-  mutate(prop = n/sum(n)) %>%
-  # get top 50 words
-  top_n(50, prop) %>%
-  # sort
-  arrange(Var1, desc(prop)) %>%
+  group_by(typ) %>% 
+  mutate(prop = n/sum(n)*100) 
+
+
+diff_pop <- df_popularizace_clean %>% 
+  select(Var1, typ, prop) %>% 
+  ungroup() %>% 
+  pivot_wider(names_from = "typ", values_from = "prop", names_prefix = "typ_") %>% 
+  replace_na(list(typ_1 = 0,
+                  typ_2 = 0)) %>% 
+  mutate(diff = typ_1 - typ_2) 
+
+diff_pop %>% 
+  arrange(desc(abs(diff))) %>% 
+  print(n =50)
+
+diffs_clean <- diff_pop %>% 
+  mutate(bump_1 = ifelse(typ_1 < typ_2,
+                           typ_1 - .25,
+                           typ_1 + .25),
+         bump_2 = ifelse(typ_1 < typ_2,
+                           typ_2 + .25,
+                           typ_2 - .25)) %>% 
+  pivot_longer(cols = -c(Var1, diff), names_to = c(".value", "web"), names_sep = "_") %>% 
+  mutate(prop = round(typ, 2),
+         diff = round(diff, 2))
+
+
+
+
+plot_dumbbell <- function(df) {
+  df %>% 
+    ggplot(aes(x = prop, y = reorder(Var1, abs(-diff)), color = web)) +
+    geom_line(color = "#E6E6E6", size = 1.75) +
+    geom_point(size = 2) +
+    labs(x = "Proporce korpusu", y = "Slovo") +
+    geom_text(aes(label = glue("{prop}%"), x = bump), size = 3) +
+    scale_color_manual(name = NULL, 
+                       breaks = c("1", "2"),
+                       values = c("#727272", "#15607a"),
+                       labels = c("P≈ô√≠rodovƒõdn√©", "Spoleƒçenskovƒõdn√≠"))+
+    scale_x_continuous(limits = c(-1,4),
+                       breaks = seq(-1,4, by = 1),
+                       labels = glue("{seq(-1,4, 1)}%")) +
+    theme_minimal() +
+    theme(legend.position =  c(1, 0.01),
+          legend.justification = c("right", "bottom"),
+          legend.background = element_rect(fill="white", linetype="blank"))
   
-pop_soc %>%
-    # reorder the position of Var1 by the relative frequency (rel) and plot
-  ggplot(aes(reorder(Var1, prop), weight=prop)) + labs(x="Slovo", y="Proporce korpusu", title = "P¯ÌrodnÌ vÏdy") + coord_flip() + geom_bar() + theme_bw()
+}
 
 
-### POPULARIZACE in NATURAL SCIENCES
-pop_nat <- df_full_popularizace %>%
-  filter(document %in% nat$web) %>%
-  # filter out stop words
-  filter(!(Var1 %in% my_stop_words$word)) %>%
-  #filter out stop words EN
-  filter(!(Var1 %in% stop_words$word)) %>%
-  # remove accents
-  mutate(Var1 = stri_trans_general(Var1, "Latin-ASCII")) %>%
-  # only words of length 3+
-  filter(str_length(Var1) > 2) %>%
-  # remove words that are longer than 25 chars (mistakes, leftover hyperlinks)
-  filter(str_length(Var1) < 25) %>%
-  # only words that contain only letters (no digits, special chars)
-  filter(str_detect(Var1, pattern)) %>%
-  # remove everything related to keyword
-  filter(!(str_detect(Var1, "^populari.*"))) %>%
-  # group so words
-  group_by(Var1) %>%
-  # count each word across documents
-  mutate(n = sum(Freq)) %>%
-  # ungroup
-  ungroup() %>%
-  # keep each word just once
-  distinct(Var1, .keep_all = TRUE) %>%
-  # convert frequency to proportion
-  mutate(prop = n/sum(n)) %>%
-  # get top 50 words
-  top_n(50, prop) %>%
-  # sort
-  arrange(Var1, desc(prop)) 
-
-
-pop_nat %>%
-  # reorder the position of Var1 by the relative frequency (rel) and plot
-  ggplot(aes(reorder(Var1, prop), weight=prop)) + labs(x="Slovo", y="Proporce korpusu", title = "P¯ÌrodnÌ vÏdy") + coord_flip() + geom_bar() + theme_bw()
-
-
-
+diffs_clean %>% 
+  slice_max(abs(diff), n = 30) %>% 
+  plot_dumbbell() 
 

@@ -1,17 +1,14 @@
 
 # Load libraries ----------------------------------------------------------
 
-library(dplyr)
-library(stringr)
+library(tidyverse)
 library(udpipe)
 library(stringi)
 library(tidytext)
-library(topicmodels)
-
-
-# increase memory limit, otherwise the loops keeps randomly failing
-memory.limit(25000)
-
+library(stm)
+library(quanteda)
+library(ggrepel)
+library(ggthemes)
 
 # Loading data ------------------------------------------------------------
 
@@ -73,286 +70,259 @@ for (i in 1:length(data_list)) {
 # Export
 # saveRDS(data_list, "context_data_list_clean")
 # Load
-# data_list <- readRDS("context_data_list")
+data_list <- readRDS("context_data_list_clean")
+
+
+# Shortening context around words -----------------------------------------
+
+
+
+shorten_texts <- function(df) {
+  df %>% 
+  # trim the keywords to version without regex chars 
+  # (otherwise only matches if keyword in the beginning of string, etc.)
+  mutate(keyword2 = str_extract(keyword, "[a-zA-Zěščřžýáíéůúďňť]+"),
+         # remove additional whitespace
+         context = str_squish(context)) %>%
+  # match 0-10 words around the keyword, allowing for extra chars around word
+    # i.e., "fyzik" would match "biofyzikální"
+    # [^\\s] anything that isn't a whitespace (workaround for special chars in CZ)
+    # + is safe, pre-processing before removed digits and other special chars.
+  mutate(text_short = str_extract(context, regex(paste0("(?:[^\\s]+\\s){0,10}[a-zA-Zěščřžýáíéůúďňť]*", 
+                                                        keyword2,"[a-zA-Zěščřžýáíéůúďňť]*(?:\\s[^\\s]+){0,10}"), ignore_case = TRUE)))
+}
+
+
+# get shorter text versions for all 
+data_list_short <- list()
+for (i in 1:length(data_list)) {
+  data_list_short[[i]] <- shorten_texts(data_list[[i]])
+  print(paste("finished", names(data_list[i]) ))
+}
+
+# stick back names
+names(data_list_short) <- names(data_list)
+
+# saveRDS(data_list_short, "data_list_short")
 
 # Lemmatization -----------------------------------------------------------
 
-
-# Load library
-# library(udpipe)
 
 # Load Czech language
 udmodel_czech <- udpipe_load_model(file = "czech-pdt-ud-2.5-191206.udpipe")
 
 
-# ! DO NOT RUN AGAIN, takes ~ 8h: 
-# Load "lemma_list" RDS file instead
 # Lemmatize each list (=website)
-lemma_list <- list()
-for (name in names(data_list)) {
-  if (nrow(data_list[[name]] > 0)) {
+lemma_list_short <- list()
+
+for (name in names(data_list_short)) {
+  if (nrow(data_list_short[[name]] > 0)) {
   print(paste("working on", name))
   print(Sys.time())
-  lemma_list[[name]] <- udpipe_annotate(udmodel_czech, x = data_list[[name]]$context, tagger = "default", parser = "none")
+  lemma_list_short[[name]] <- udpipe_annotate(udmodel_czech, 
+                                        x = data_list_short[[name]]$text_short, 
+                                        tagger = "default", parser = "none")
   } else {
-    print(paste("Length of", names(data_list[i]), "is zero", sep=" "))
+    print(paste("Length of", names(data_list_short[i]), "is zero", sep=" "))
   }
 }
 
 
-# Save
-# saveRDS(lemma_list, "lemma_list")
-# Load
-# lemma_list <- readRDS("lemma_list")
 
+# lemma_list <- readRDS("lemma_list_short")
+lemma_list <- lemma_list_short
 
 # Convert udpipe objects to data.frames
-## Try lapply first, if fails, use for loop (to see where it fails to resume from there):
 df <- lapply(lemma_list, as.data.frame)
-# for (name in names(lemma_list)) {
-#  print(paste("Now working on", name, sep = " "))
-#  df[[name]] <- as.data.frame(lemma_list[[name]])
-# }
-
-# saveRDS(df, "df_lemmatized")
 
 
-
-# convert each list to corpus
-for (name in names(lemma_list)) {
-  df[[name]] <- as.data.frame(table(df[[name]]$lemma))
-  # add column that denotes from which site it is
-  df[[name]]$document <- name
-}
-
-# converting lists to one big data frame
-df_full <- data.frame()
-for (name in names(lemma_list)) {
-  df_full <- rbind(df_full, df[[name]])
-}
-
-#saveRDS(df_full, "df_full_pre-processed")
-# df_full <- readRDS("df_full_pre-processed")
+# saveRDS(df, "df_lemmatized_short")
+# df <- readRDS('df_lemmatized_short')
 
 
-# Further pre-processing --------------------------------------------------
-
-
-# Load stop words
-stop_words_cz <- read.delim("stop_words_czech_R.txt", encoding="UTF-8", header = F, quote="\"", comment.char="")
-stop_words_cz <- stop_words_cz$V1
-
-# bind to a tibble, so it contains both word and lexicon, and can be used instead of a en file
-my_stop_words <- tibble(word = stop_words_cz, lexicon="custom")
-
-# convert to lowecase
-df_full$Var1 <- tolower(df_full$Var1)
-# remove whitespace
-df_full$Var1 <- str_trim(df_full$Var1, side="both")
-
-# pattern = only words that are made of letters, no other chars
-# this version only works when text is without accents -> text has to be converted first!
-pattern <- "^(:?[a-z]*)$"
-# str_view(df_full, pattern, match = T)
-
-
-df_processed <-
-  df_full %>%
-  # filter out stop words
-  filter(!(Var1 %in% my_stop_words$word)) %>%
-  # filter out english stop words too
-  filter(!Var1 %in% stop_words$word) %>%
-  # remove accents
-  mutate(Var1 = stri_trans_general(Var1, "Latin-ASCII")) %>%
-  # only words of length 3+
-  filter(str_length(Var1) > 2) %>%
-  # remove words that are longer than 25 chars (mistakes, leftover hyperlinks)
-  filter(str_length(Var1) < 25) %>%
-  # only words that contain only letters (no digits, special chars)
-  filter(str_detect(Var1, pattern)) 
-
-
-
-# Topic models ------------------------------------------------------------
-
-### This model is featured in the paper
-
-# cast to document-frame matrix
-popsci_dtm <- df_processed %>%
-  cast_dtm(document, Var1, Freq)  
-
-# topic model w/ 10 topics
-ten_lda <- LDA(popsci_dtm, k = 10, control = list(seed = 1234))
-# saveRDS(ten_lda, "ten_lda_all")  
-
-ten_topics <- tidy(ten_lda, matrix = "beta")
-
-ten_top_terms <- ten_topics %>%
-  group_by(topic) %>%
-  slice_max(beta, n = 20) %>% 
-  ungroup() %>%
-  arrange(topic, -beta)
-
-
-ten_top_terms %>%
-  mutate(term = reorder_within(term, beta, topic)) %>%
-  ggplot(aes(beta, term, fill = factor(topic))) +
-  geom_col(show.legend = FALSE) +
-  facet_wrap(~ topic, scales = "free") +
-  scale_y_reordered()
-
-# show which documents belong to which topics
-ten_gamma <- tidy(ten_lda, matrix = "gamma")
-
-ten_gamma <- popsci_gamma %>%
-    group_by(document) %>%
-    filter(gamma == max(gamma))
-
-ten_gamma <- ten_gamma %>% inner_join(def_web, by=c("document" = "web"))
-
-ggsave("../grafy/ten_lda_final.png")
-
-
-
-# Topic models: Alternative solutions  ------------------------------------
-
-## Five topics --------------------------------------------------------------
-
-# topic model w/ 5 topics
-five_lda <- LDA(popsci_dtm, k = 5, control = list(seed = 1234))
-
-five_topics <- tidy(five_lda, matrix = "beta")
-
-five_top_terms <- five_topics %>%
-  group_by(topic) %>%
-  slice_max(beta, n = 20) %>% 
-  ungroup() %>%
-  arrange(topic, -beta)
-
-
-five_top_terms %>%
-  mutate(term = reorder_within(term, beta, topic)) %>%
-  ggplot(aes(beta, term, fill = factor(topic))) +
-  geom_col(show.legend = FALSE) +
-  facet_wrap(~ topic, scales = "free") +
-  scale_y_reordered()
-
-
-# show which documents belong to which topics
-five_gamma <- tidy(five_lda, matrix = "gamma")
-
-five_gamma <- five_gamma %>%
-  group_by(document) %>%
-  filter(gamma == max(gamma))
-
-five_gamma <- five_gamma %>% inner_join(def_web, by=c("document" = "web"))
-
-
-## Thirty topics -----------------------------------------------------------
-
-
-# model w/ 30 topics
-thirty_lda <- LDA(popsci_dtm, k = 30, control = list(seed = 1234))
-# saveRDS(thirty_lda, "thirty_lda_full")
-
-
-thirty_topics <- tidy(thirty_lda, matrix = "beta")
-
-thirty_top_terms <- thirty_topics %>%
-  group_by(topic) %>%
-  slice_max(beta, n = 20) %>% 
-  ungroup() %>%
-  arrange(topic, -beta)
-
-
-thirty_top_terms %>%
-  mutate(term = reorder_within(term, beta, topic)) %>%
-  ggplot(aes(beta, term, fill = factor(topic))) +
-  geom_col(show.legend = FALSE) +
-  facet_wrap(~ topic, scales = "free") +
-  scale_y_reordered()
-
-
-## A solution where each text is a document --------------------------------
-
-
-df <- readRDS("df_lemmatized")
-
-### NEW PARTS
-
+# converting lists into df 
 df2 <- list()
+# reduce the lists
 for (name in names(df)) {
   df2[[name]] <- select(df[[name]], doc_id, lemma)
   df2[[name]]$document <- name
 }
 
+# bind them into one big df
 df_full <- data.frame()
 for (name in names(df2)) {
   df_full <- rbind(df_full, df2[[name]])
 }
 
 
-df_full$doc_id <- substring(df_full$doc_id, 4)
-df_full$doc <- paste0(df_full$document, "_", df_full$doc_id)
 
-df_full$lemma <- tolower(df_full$lemma)
-# remove whitespace
-df_full$lemma <- str_trim(df_full$lemma, side="both")
 
-# pattern = only words that are made of letters, no other chars
-# this version only works when text is without accents -> text has to be converted first!
-pattern <- "^(:?[a-z]*)$"
 
-df_clean <- df_full %>%
+# Further pre-processing --------------------------------------------------
+
+
+
+# Load stop words
+stop_words_cz <- read.delim("stop_words_czech_R.txt", encoding="UTF-8", header = F, quote="\"", comment.char="")
+
+# bind to a tibbl + rowbind the english stopwords as well
+my_stop_words <- tibble(word = stop_words_cz$V1, lexicon="custom") %>% 
+  bind_rows(stop_words)
+
+
+
+df_processed <-
+  df_full %>%
+  # paste doc_id and document together, to get 1 text = 1 document
+  mutate(doc_id = substring(doc_id, 4),
+         doc = paste0(document, "_", doc_id)) %>% 
   # filter out stop words
   filter(!(lemma %in% my_stop_words$word)) %>%
   # remove accents
-  mutate(word = stri_trans_general(lemma, "Latin-ASCII")) %>%
+  mutate(lemma = stri_trans_general(lemma, "Latin-ASCII")) %>%
   # only words of length 3+
-  filter(str_length(word) > 2) %>%
+  filter(str_length(lemma) > 2) %>%
   # remove words that are longer than 25 chars (mistakes, leftover hyperlinks)
-  filter(str_length(word) < 25) %>%
+  filter(str_length(lemma) < 25) %>%
   # only words that contain only letters (no digits, special chars)
-  filter(str_detect(word, pattern)) %>%
-  select(document, doc, word)
-
-
-df_processed <- df_clean %>%
-  group_by(doc) %>%
-  count(word) %>%
+  # this can only be done after removing accents!! (accents = special chars)
+  filter(str_detect(lemma, "^(:?[a-z]*)$"))  %>% 
+  # get counts per word per document
+  group_by(doc, lemma) %>% 
+  mutate(freq = n()) %>% 
+  distinct(lemma, .keep_all = TRUE) %>% 
   ungroup()
 
+
+
+# saveRDS(df_full, "df_full_pre-processed_short")
+# df_full <- readRDS("df_full_pre-processed_short")
+
+# Corpus ------------------------------------------------------------
+
+### This model is featured in the paper
+
+# cast to document-feature matrix
 popsci_dtm <- df_processed %>%
-  cast_dtm(doc, word, n) 
-
-#saveRDS(popsci_dtm, "popsci_dtm")
-# popsci_dtm <- readRDS("popsci_dtm)
-
-# topic model w/ 10 topics
-ten_lda <- LDA(popsci_dtm, k = 10, control = list(seed = 1234))
+  cast_dfm(doc, lemma, freq)  
 
 
-ten_topics <- tidy(ten_lda, matrix = "beta")
+# trimming the corpus (quanteda)
+popsci_dtm_trim <- dfm_trim(popsci_dtm, 
+                          max_docfreq = 0.5,
+                          docfreq_type = "prop") %>% 
+                  dfm_trim(min_docfreq = 500,
+                          docfreq_type = "count")               
 
-ten_top_terms <- ten_topics %>%
+# lookup dimensions
+dim(popsci_dtm_trim)
+
+topfeatures(popsci_dtm_trim, n = 30, scheme = "docfreq")
+
+
+# convert dfm to stm object (via stm package)
+dfm_stm <- convert(popsci_dtm_trim, to = "stm")
+
+
+
+# Topic models ------------------------------------------------------------
+
+## TODO: Semantic cohorence
+# collocation : limits
+
+# calculate models k 10 to 50 (by 10s)
+many_models <- data_frame(K = seq(10, 50, by = 10)) %>%
+  mutate(topic_model = map(K, ~stm(documents = dfm_stm$documents, ## TODO: lookup furrr
+                                          vocab = dfm_stm$vocab, 
+                                          K = .,
+                                          verbose = TRUE)))
+
+
+# calculate exclusivity and semantic coherence for each model
+k_result <- many_models %>%
+  mutate(exclusivity = map(topic_model, exclusivity),
+         semantic_coherence = map(topic_model, semanticCoherence, dfm_stm$documents, M = 10))
+
+# get means of semantic coherence per model
+k_result %>% 
+  transmute(K,
+            sem_coherence_mean = map_dbl(semantic_coherence, mean),
+            excl_mean = map_dbl(exclusivity, mean),
+            sem_coherence_median = map_dbl(semantic_coherence, median),
+            excl_median = map_dbl(exclusivity, median)) %>% 
+  ggplot(aes(sem_coherence_mean, excl_mean, color = as.factor(K))) +
+  geom_point(size = 2, alpha = 0.7) +
+  labs(x = "Sémantická koherence (průměr)",
+       y = "Exkluzivita (průměr)",
+       title = "Porovnání sémantické koherence a exkluzivity modelů") +
+  theme_minimal() +
+  geom_text_repel(aes(label = K), size = 3) +
+  theme(legend.position = "none",
+        plot.title = element_text(size = 10),
+              axis.title=element_text(size=9),
+              axis.text = element_text(size = 8))
+
+
+
+topic_model_20 <- k_result %>% 
+  filter(K == 20) %>% 
+  pull(topic_model) %>% 
+  .[[1]]
+
+
+td_beta <- tidy(topic_model_20)
+
+td_gamma <- tidy(topic_model_20, matrix = "gamma",
+                 document_names = popsci_dtm_trim@Dimnames$docs)
+
+
+top_terms <- td_beta %>%
+  arrange(beta) %>%
   group_by(topic) %>%
-  slice_max(beta, n = 10) %>% 
-  ungroup() %>%
-  arrange(topic, -beta)
+  top_n(7, beta) %>%
+  arrange(-beta) %>%
+  select(topic, term) %>%
+  summarise(terms = list(term)) %>%
+  mutate(terms = map(terms, paste, collapse = ", ")) %>% 
+  unnest(terms)
 
+gamma_terms <- td_gamma %>%
+  group_by(topic) %>%
+  summarise(gamma = mean(gamma)) %>%
+  arrange(desc(gamma)) %>%
+  left_join(top_terms, by = "topic") %>%
+  mutate(topic = paste0("Téma ", topic),
+         topic = reorder(topic, gamma))
 
-ten_top_terms %>%
-  mutate(term = reorder_within(term, beta, topic)) %>%
-  ggplot(aes(beta, term, fill = factor(topic))) +
+plot_topics <- gamma_terms %>%
+  top_n(20, gamma) %>%
+  ggplot(aes(topic, gamma, label = terms, fill = topic)) +
   geom_col(show.legend = FALSE) +
-  facet_wrap(~ topic, scales = "free") +
-  scale_y_reordered()
-## same results as the solution that does not account for each text
+  geom_text(hjust = 0, nudge_y = 0.0005, size = 2) +
+  coord_flip() +
+  scale_y_continuous(expand = c(0,0),
+                     limits = c(0, 0.13),
+                     labels = scales::percent_format()) +
+  theme_tufte(base_family = "IBMPlexSans", ticks = FALSE) +
+  theme(plot.title = element_text(size = 10),
+        axis.text=element_text(size=7)) +
+  labs(x = NULL, y = expression(gamma),
+       title = "Prevalence témat v korpusu")
 
 
-## this crashes the system - cannot be done on this pc!
-thirty_lda <- LDA(popsci_dtm, k = 30, control = list(seed = 1234))
 
+td_gamma <- td_gamma %>% 
+  mutate(doc_orig = str_remove(document, "_\\d+"))
 
+gamma_ord <- td_gamma %>% 
+  group_by(document) %>% 
+  arrange(desc(gamma)) %>% 
+  mutate(rank = row_number()) %>% 
+  filter(rank == 1) %>% 
+  group_by(doc_orig) %>% 
+  count(topic)
 
-
+gamma_ord_short <- gamma_ord %>% 
+  slice_max(n, n=3)
+  
+  
