@@ -239,7 +239,6 @@ diffs_clean_veda %>%
 
 ### VEDA in SOCIAL/HUM SCIENCES
 veda_soc <- df_veda_clean %>%
-  group_by()
   # group so words
   group_by(Var1) %>%
   # count each word across documents
@@ -370,7 +369,7 @@ diffs_clean <- diff_pop %>%
 
 
 
-plot_dumbbell <- function(df) {
+plot_dumbbell <- function(df, color2 = "#15607a") {
   df %>% 
     ggplot(aes(x = prop, y = reorder(Var1, abs(-diff)), color = web)) +
     geom_line(color = "#E6E6E6", size = 1.75) +
@@ -379,7 +378,7 @@ plot_dumbbell <- function(df) {
     geom_text(aes(label = glue("{prop}%"), x = bump), size = 3) +
     scale_color_manual(name = NULL, 
                        breaks = c("1", "2"),
-                       values = c("#727272", "#15607a"),
+                       values = c("#727272", color2),
                        labels = c("Přírodovědné", "Společenskovědní"))+
     scale_x_continuous(limits = c(-1,4),
                        breaks = seq(-1,4, by = 1),
@@ -396,3 +395,7 @@ diffs_clean %>%
   slice_max(abs(diff), n = 30) %>% 
   plot_dumbbell() 
 
+## BW version
+diffs_clean %>% 
+  slice_max(abs(diff), n = 30) %>% 
+  plot_dumbbell(color2 = "black") 

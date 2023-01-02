@@ -314,7 +314,7 @@ nadrepre_soc <- diffs_clean %>%
 
 
 
-plot_dumbbell_combined <- function(df) {
+plot_dumbbell_combined <- function(df, color1 = "#727272", color2 ="#15607a") {
   df %>% 
     ggplot(aes(x = prop, y = reorder(name, abs(-diff)), color = web)) +
     geom_line(color = "#E6E6E6", size = 1.75) +
@@ -323,7 +323,7 @@ plot_dumbbell_combined <- function(df) {
     geom_text(aes(label = glue("{prop}%"), x = bump), size = 3) +
     scale_color_manual(name = NULL, 
                        breaks = c("nat", "soc"),
-                       values = c("#727272", "#15607a"),
+                       values = c(color1, color2),
                        labels = c("Přírodovědné", "Společenskovědní"))+
     theme_minimal() 
 
@@ -340,10 +340,26 @@ nadrepre_nat2 <- diffs_clean %>%
 
 nadrepre_soc2 <- diffs_clean %>% 
   filter(diff > 0) %>% 
-  plot_dumbbell_combined()
+  plot_dumbbell_combined() 
 
 # patch them together
 (nadrepre_soc2 | nadrepre_nat2) + plot_layout(widths = c(1, 2), guides = "collect") & theme(legend.position = 'top')
+
+
+# B&W ---------------------------------------------------------------------
+
+nadrepre_nat_bw <- diffs_clean %>% 
+  filter(diff < 0) %>% 
+  plot_dumbbell_combined(color2 = "black") + 
+  labs(y = "", x = "Procenta")
+
+
+nadrepre_soc_bw <- diffs_clean %>% 
+  filter(diff > 0) %>% 
+  plot_dumbbell_combined(color2 = "black") 
+
+# patch them together
+(nadrepre_soc_bw | nadrepre_nat_bw) + plot_layout(widths = c(1, 2), guides = "collect") & theme(legend.position = 'top')
 
 
 
@@ -418,3 +434,24 @@ coded_full %>%
 
 ggsave("top_250_combined.png")
 
+
+
+# B&W ---------------------------------------------------------------------
+
+coded_full %>% 
+  ggplot(aes(x = prop, y = fct_reorder(type, desc(type)), color = web)) +
+  geom_line(color = "#E6E6E6", size = 1.75) +
+  geom_point(size = 2) +
+  labs(x = "Procenta", y = "Typ webu") +
+  geom_text(aes(label = glue("{prop}%"), x = bump), size = 3) +
+  scale_color_manual(name = NULL, 
+                     breaks = c("nat", "soc"),
+                     values = c("#727272", "black"),
+                     labels = c("Přírodovědný", "Společenskovědní"))+
+  scale_x_continuous(limits = c(0,30),
+                     breaks = seq(0,30, by = 5),
+                     labels = glue("{seq(0,30, 5)}%")) +
+  theme_minimal() +
+  theme(legend.position =  c(1, 0.025),
+        legend.justification = c("right", "bottom"),
+        legend.background = element_rect(fill="white", linetype="blank"))
