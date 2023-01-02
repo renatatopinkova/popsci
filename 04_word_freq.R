@@ -234,7 +234,7 @@ diffs_clean_veda <- diff_veda %>%
 
 diffs_clean_veda %>% 
   slice_max(abs(diff), n = 28) %>% 
-  plot_dumbbell() 
+  plot_dumbbell(color2 = "black") 
 
 
 ### VEDA in SOCIAL/HUM SCIENCES
