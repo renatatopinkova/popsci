@@ -4,6 +4,8 @@ library(stringr)
 library(stringi)
 library(udpipe)
 library(ggplot2)
+library(tidyr)
+library(glue)
 
 # Load data ---------------------------------------------------------------
 
@@ -172,6 +174,7 @@ stop_words_cz <- stop_words_cz$V1
 my_stop_words <- tibble(word = stop_words_cz, lexicon="custom")
 
 
+pattern <- "^(:?[a-z]*)$"
 
 # V?DA ------------------------------------------------------------
 # this should be done simpler, will simplify later (DRY)
@@ -194,98 +197,6 @@ df_veda_clean <- df_full_veda %>%
   # remove everything related to keyword
   filter(!(str_detect(Var1, "^ved.*")))
   
-df_veda_clean <- df_veda_clean %>% 
-  inner_join(def_web, by = c("document"="web")) %>% 
-  filter(typ <= 2) %>% 
-  # group so words
-  group_by(Var1, typ) %>%
-  # count each word across documents
-  mutate(n = sum(Freq)) %>%
-  # keep each word just once
-  distinct(Var1, typ, .keep_all = TRUE) %>%
-  # convert frequency to proportion
-  group_by(typ) %>% 
-  mutate(prop = n/sum(n)*100) 
-
-
-
-diff_veda <- df_veda_clean %>% 
-  select(Var1, typ, prop) %>% 
-  ungroup() %>% 
-  pivot_wider(names_from = "typ", values_from = "prop", names_prefix = "typ_") %>% 
-  replace_na(list(typ_1 = 0,
-                  typ_2 = 0)) %>% 
-  mutate(diff = typ_1 - typ_2) 
-
-diff_veda %>% 
-  arrange(desc(abs(diff))) %>% 
-  print(n =50)
-
-diffs_clean_veda <- diff_veda %>% 
-  mutate(bump_1 = ifelse(typ_1 < typ_2,
-                         typ_1 - .25,
-                         typ_1 + .25),
-         bump_2 = ifelse(typ_1 < typ_2,
-                         typ_2 + .25,
-                         typ_2 - .25)) %>% 
-  pivot_longer(cols = -c(Var1, diff), names_to = c(".value", "web"), names_sep = "_") %>% 
-  mutate(prop = round(typ, 2),
-         diff = round(diff, 2))
-
-diffs_clean_veda %>% 
-  slice_max(abs(diff), n = 28) %>% 
-  plot_dumbbell(color2 = "black") 
-
-
-### VEDA in SOCIAL/HUM SCIENCES
-veda_soc <- df_veda_clean %>%
-  # group so words
-  group_by(Var1) %>%
-  # count each word across documents
-  mutate(n = sum(Freq)) %>%
-  # ungroup
-  ungroup() %>%
-  # keep each word just once
-  distinct(Var1, .keep_all = TRUE) %>%
-  # convert frequency to proportion
-  mutate(prop = n/sum(n)) %>%
-  # get top 50 words
-  top_n(20, prop) %>%
-  # sort
-  arrange(Var1, desc(prop)) 
-  
-# reorder the position of Var1 by the relative frequency (rel) and plot
-veda_soc %>%  
-  ggplot(aes(reorder(Var1, prop), weight=prop)) + labs(x="Slovo", y="Proporce korpusu", title = "Společenské vědy") + coord_flip() + geom_bar() + theme_bw()
-
-ggsave("../grafy/veda_socw_50.png")
-
-
-### VEDA in NATURAL SCIENCES
-veda_nat <- df_veda_clean %>%
-  filter(document %in% nat$web) %>%
-  # group so words
-  group_by(Var1) %>%
-  # count each word across documents
-  mutate(n = sum(Freq)) %>%
-  # ungroup
-  ungroup() %>%
-  # keep each word just once
-  distinct(Var1, .keep_all = TRUE) %>%
-  # convert frequency to proportion
-  mutate(prop = n/sum(n)) %>%
-  # get top 50 words
-  top_n(50, prop) %>%
-  # sort
-  arrange(Var1, desc(prop))
-
-veda_nat %>%
-  # reorder the position of Var1 by the relative frequency (rel) and plot
-  ggplot(aes(reorder(Var1, prop), weight=prop)) + labs(x="Slovo", y="Proporce korpusu", title = "P??rodn? v?dy") + coord_flip() + geom_bar() + theme_bw()
-
-ggsave("../grafy/veda_natw_50.png")
-
-
 
 # Popularizace by type ---------------------------------------------------------
 
@@ -308,94 +219,3 @@ df_popularizace_clean <- df_full_popularizace %>%
   filter(!(str_detect(Var1, "^populari.*"))) 
   
   
-df_popularizace_clean %>%  # group so words
-  group_by(Var1) %>%
-  # count each word across documents
-  mutate(n = sum(Freq)) %>%
-  # ungroup
-  ungroup() %>%
-  # keep each word just once
-  distinct(Var1, .keep_all = TRUE) %>%
-  # convert frequency to proportion
-  mutate(prop = n/sum(n)) %>%
-  # get top 50 words
-  top_n(20, prop) %>%
-  # sort
-  arrange(Var1, desc(prop)) %>%
-  # reorder the position of Var1 by the relative frequency (rel) and plot
-  ggplot(aes(reorder(Var1, prop), weight=prop)) + labs(x="Slovo", y="Proporce korpusu") + coord_flip() + geom_bar() + theme_bw()
-
-
-
-
-### POPULARIZACE in SOCIAL/HUM SCIENCES
-df_popularizace_clean <-  df_popularizace_clean %>% 
-  inner_join(def_web, by = c("document"="web")) %>% 
-  filter(typ <= 2) %>% 
-  # group so words
-  group_by(Var1, typ) %>%
-  # count each word across documents
-  mutate(n = sum(Freq)) %>%
-  # keep each word just once
-  distinct(Var1, typ, .keep_all = TRUE) %>%
-  # convert frequency to proportion
-  group_by(typ) %>% 
-  mutate(prop = n/sum(n)*100) 
-
-
-diff_pop <- df_popularizace_clean %>% 
-  select(Var1, typ, prop) %>% 
-  ungroup() %>% 
-  pivot_wider(names_from = "typ", values_from = "prop", names_prefix = "typ_") %>% 
-  replace_na(list(typ_1 = 0,
-                  typ_2 = 0)) %>% 
-  mutate(diff = typ_1 - typ_2) 
-
-diff_pop %>% 
-  arrange(desc(abs(diff))) %>% 
-  print(n =50)
-
-diffs_clean <- diff_pop %>% 
-  mutate(bump_1 = ifelse(typ_1 < typ_2,
-                           typ_1 - .25,
-                           typ_1 + .25),
-         bump_2 = ifelse(typ_1 < typ_2,
-                           typ_2 + .25,
-                           typ_2 - .25)) %>% 
-  pivot_longer(cols = -c(Var1, diff), names_to = c(".value", "web"), names_sep = "_") %>% 
-  mutate(prop = round(typ, 2),
-         diff = round(diff, 2))
-
-
-
-
-plot_dumbbell <- function(df, color2 = "#15607a") {
-  df %>% 
-    ggplot(aes(x = prop, y = reorder(Var1, abs(-diff)), color = web)) +
-    geom_line(color = "#E6E6E6", size = 1.75) +
-    geom_point(size = 2) +
-    labs(x = "Proporce korpusu", y = "Slovo") +
-    geom_text(aes(label = glue("{prop}%"), x = bump), size = 3) +
-    scale_color_manual(name = NULL, 
-                       breaks = c("1", "2"),
-                       values = c("#727272", color2),
-                       labels = c("Přírodovědné", "Společenskovědní"))+
-    scale_x_continuous(limits = c(-1,4),
-                       breaks = seq(-1,4, by = 1),
-                       labels = glue("{seq(-1,4, 1)}%")) +
-    theme_minimal() +
-    theme(legend.position =  c(1, 0.01),
-          legend.justification = c("right", "bottom"),
-          legend.background = element_rect(fill="white", linetype="blank"))
-  
-}
-
-
-diffs_clean %>% 
-  slice_max(abs(diff), n = 30) %>% 
-  plot_dumbbell() 
-
-## BW version
-diffs_clean %>% 
-  slice_max(abs(diff), n = 30) %>% 
-  plot_dumbbell(color2 = "black") 

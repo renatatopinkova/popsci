@@ -8,6 +8,7 @@ library(ggplot2)
 library(tidyr)
 library(glue)
 library(patchwork)
+library(readr)
 
 # Data import -------------------------------------------------------------
 
@@ -254,18 +255,6 @@ diff_plus <- soc_nat %>%
 
 diffs <- bind_rows(diff_minus, diff_plus)
 
-# diffs %>% 
-#   ggplot(aes(y=reorder(name, diff), x=diff, fill = positive)) + geom_col() +
-#   labs(x = "Rozdíl v zastoupení odkazů", y = "Název webu") +
-#   guides(fill = "none") + 
-#   geom_text(aes(label = diff, x = bump), size = 2.5) +
-#   scale_x_continuous(limits = c(-60,30),
-#                      breaks = seq(-60,30, by = 10)) +
-#   #scale_fill_brewer(palette = "Paired") +
-#   scale_fill_manual(values = c("#727272", "#15607a")) +
-#   theme_minimal() 
-
-
 
 diffs_clean <- diffs %>% 
   select(-c(n_soc, n_nat)) %>% 
@@ -285,12 +274,12 @@ df %>%
   ggplot(aes(x = prop, y = reorder(name, abs(-diff)), color = web)) +
   geom_line(color = "#E6E6E6", size = 1.75) +
   geom_point(size = 2) +
-  labs(x = "Procenta", y = "Název webu") +
+  labs(x = "Percent", y = "Website") +
   geom_text(aes(label = glue("{prop}%"), x = bump), size = 3) +
   scale_color_manual(name = NULL, 
                      breaks = c("nat", "soc"),
                      values = c("#727272", "#15607a"),
-                     labels = c("Přírodovědné", "Společenskovědní"))+
+                     labels = c("Natural", "Social"))+
   scale_x_continuous(limits = c(-5,90),
                      breaks = seq(-5,90, by = 10),
                      labels = glue("{seq(-5,90, 10)}%")) +
@@ -319,12 +308,12 @@ plot_dumbbell_combined <- function(df, color1 = "#727272", color2 ="#15607a") {
     ggplot(aes(x = prop, y = reorder(name, abs(-diff)), color = web)) +
     geom_line(color = "#E6E6E6", size = 1.75) +
     geom_point(size = 2) +
-    labs(x = "Procenta", y = "Název webu") +
+    labs(x = "Percent", y = "Website") +
     geom_text(aes(label = glue("{prop}%"), x = bump), size = 3) +
     scale_color_manual(name = NULL, 
                        breaks = c("nat", "soc"),
                        values = c(color1, color2),
-                       labels = c("Přírodovědné", "Společenskovědní"))+
+                       labels = c("Natural", "Social"))+
     theme_minimal() 
 
   
@@ -335,7 +324,7 @@ plot_dumbbell_combined <- function(df, color1 = "#727272", color2 ="#15607a") {
 nadrepre_nat2 <- diffs_clean %>% 
   filter(diff < 0) %>% 
   plot_dumbbell_combined() + 
-  labs(y = "", x = "Procenta")
+  labs(y = "", x = "Percent")
 
 
 nadrepre_soc2 <- diffs_clean %>% 
@@ -351,7 +340,7 @@ nadrepre_soc2 <- diffs_clean %>%
 nadrepre_nat_bw <- diffs_clean %>% 
   filter(diff < 0) %>% 
   plot_dumbbell_combined(color2 = "black") + 
-  labs(y = "", x = "Procenta")
+  labs(y = "", x = "Percent")
 
 
 nadrepre_soc_bw <- diffs_clean %>% 
@@ -361,97 +350,3 @@ nadrepre_soc_bw <- diffs_clean %>%
 # patch them together
 (nadrepre_soc_bw | nadrepre_nat_bw) + plot_layout(widths = c(1, 2), guides = "collect") & theme(legend.position = 'top')
 
-
-
-# Add coded dataset -------------------------------------------------------
-
-# coded into 7 groups + 99
-# load coded datasets
-codedS <- read.csv("socw.csv", sep=";")
-codedN <- read.csv("natw.csv", sep=";")
-
-# remove NAs
-codedS <- codedS %>% filter(!(is.na(type)))
-codedN <- codedN %>% filter(!(is.na(type)))
-
-# % of each category in top 250
-codedS_top <- codedS %>% 
-  count(type) %>% mutate(prop = n/249)
-
-codedN_top <- codedN %>% 
-  count(type) %>% mutate(prop = n/256)
-
-# Export: do not run, just for reproducibility, shows how the file in project was made
-# write.csv2(codedS_top, "soc_top250_catg.csv")
-# write.csv2(codedN_top, "nat_top250_catg.csv")
-
-# convert type to factor & label it -> makes better plots
-codedS_top$type <- as.factor(codedS_top$type)
-codedN_top$type <- as.factor(codedN_top$type)
-
-levels(codedS_top$type) <- c("sociální média", "zpravodajství", "nakladatelství", "vládní weby", "popularizační akce/weby","vědecké inst.", "grantové ag", "ostatní")
-levels(codedN_top$type) <- c("sociální média", "zpravodajství", "nakladatelství", "vládní weby", "popularizační akce/weby","vědecké inst.", "grantové ag", "ostatní")
-
-
-
-
-coded_full <- codedN_top %>% 
-  full_join(codedS_top, by = "type", suffix = c("_nat", "_soc")) %>% 
-  mutate(prop_nat = round(prop_nat * 100, 0),
-         prop_soc = round(prop_soc * 100, 0),
-         bump_nat = ifelse(prop_nat < prop_soc,
-                       prop_nat - 2,
-                       prop_nat + 2),
-         bump_soc = ifelse(prop_nat < prop_soc,
-                           prop_soc + 2,
-                           prop_soc - 2)) %>% 
-  select(-c(n_nat, n_soc)) %>% 
-  pivot_longer(cols = -type, names_to = c(".value", "web"), names_sep = "_")
-  
-  
- 
-  
-  ## TODO: podle videa
-
-# barbell plot
-coded_full %>% 
-  ggplot(aes(x = prop, y = fct_reorder(type, desc(type)), color = web)) +
-  geom_line(color = "#E6E6E6", size = 1.75) +
-  geom_point(size = 2) +
-  labs(x = "Procenta", y = "Typ webu") +
-  geom_text(aes(label = glue("{prop}%"), x = bump), size = 3) +
-  scale_color_manual(name = NULL, 
-                     breaks = c("nat", "soc"),
-                     values = c("#727272", "#15607a"),
-                     labels = c("Přírodovědný", "Společenskovědní"))+
-  scale_x_continuous(limits = c(0,30),
-                     breaks = seq(0,30, by = 5),
-                     labels = glue("{seq(0,30, 5)}%")) +
-  theme_minimal() +
-  theme(legend.position =  c(1, 0.025),
-        legend.justification = c("right", "bottom"),
-        legend.background = element_rect(fill="white", linetype="blank"))
-
-ggsave("top_250_combined.png")
-
-
-
-# B&W ---------------------------------------------------------------------
-
-coded_full %>% 
-  ggplot(aes(x = prop, y = fct_reorder(type, desc(type)), color = web)) +
-  geom_line(color = "#E6E6E6", size = 1.75) +
-  geom_point(size = 2) +
-  labs(x = "Procenta", y = "Typ webu") +
-  geom_text(aes(label = glue("{prop}%"), x = bump), size = 3) +
-  scale_color_manual(name = NULL, 
-                     breaks = c("nat", "soc"),
-                     values = c("#727272", "black"),
-                     labels = c("Přírodovědný", "Společenskovědní"))+
-  scale_x_continuous(limits = c(0,30),
-                     breaks = seq(0,30, by = 5),
-                     labels = glue("{seq(0,30, 5)}%")) +
-  theme_minimal() +
-  theme(legend.position =  c(1, 0.025),
-        legend.justification = c("right", "bottom"),
-        legend.background = element_rect(fill="white", linetype="blank"))
